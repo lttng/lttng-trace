@@ -751,7 +751,7 @@ int main(int argc, char **argv)
 	}
 	fprintf(stderr, "%sTracing session `%s` created. It can be customized using the `lttng` command.\n", MESSAGE_PREFIX, ptrace_ctx.session_name);
 	if (!opt_no_pause) {
-		fprintf(stderr, "Press <ENTER> key when ready to run the child process.\n");
+		fprintf(stderr, "%sPress <ENTER> key when ready to run the child process.\n", MESSAGE_PREFIX);
 		getchar();
 	}
 
