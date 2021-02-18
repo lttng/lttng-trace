@@ -36,7 +36,7 @@
 #include <lttng/session.h>
 #include <lttng/tracker.h>
 
-#define MESSAGE_PREFIX "[lttng-ptrace] "
+#define MESSAGE_PREFIX "[lttng-trace] "
 #define NR_HANDLES	2
 
 #ifndef PTRACE_EVENT_STOP
@@ -542,11 +542,8 @@ void sighandler(int signo, siginfo_t *siginfo __unused, void *context __unused)
 }
 
 static
-int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx)
+int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx, const char *cmd_name)
 {
-	pid_t pid;
-	char pid_str[12];
-	int ret;
 	char datetime[16];
 	struct tm *timeinfo;
 
@@ -565,12 +562,8 @@ int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx)
 		strcpy(ctx->session_name, session_name);
 	} else {
 		memset(ctx, 0, sizeof(*ctx));
-		strcpy(ctx->session_name, "lttng-ptrace-");
-		pid = getpid();
-		ret = sprintf(pid_str, "%d", (int) pid);
-		if (ret < 0)
-			return -1;
-		strcat(ctx->session_name, pid_str);
+		strncpy(ctx->session_name, cmd_name, LTTNG_NAME_MAX - 1);
+		ctx->session_name[LTTNG_NAME_MAX - 1] = '\0';
 		strcat(ctx->session_name, "-");
 		strcat(ctx->session_name, datetime);
 	}
@@ -581,7 +574,7 @@ int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx)
 		}
 		strcpy(ctx->path, output_path);
 	} else {
-		strcpy(ctx->path, "/tmp/lttng-ptrace/");
+		strcpy(ctx->path, "/tmp/lttng-trace/");
 		strcat(ctx->path, ctx->session_name);
 	}
 	return 0;
@@ -704,7 +697,7 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 
-	if (lttng_trace_ctx_init(&ptrace_ctx))
+	if (lttng_trace_ctx_init(&ptrace_ctx, argv[skip_args]))
 		abort();
 
 	act.sa_sigaction = sighandler;
