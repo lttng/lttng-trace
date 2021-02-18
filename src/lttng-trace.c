@@ -44,10 +44,10 @@
 #endif
 
 #define PERROR(msg)		perror(msg "\n")
-#define ERR(fmt, args...)	fprintf(stderr, fmt, ## args)
+#define ERR(fmt, args...)	fprintf(stderr, fmt "\n", ## args)
 
 #ifdef DEBUG
-#define DBG(fmt, args...)	printf(fmt, ## args)
+#define DBG(fmt, args...)	printf(fmt "\n", ## args)
 #else
 #define DBG(fmt, args...)
 #endif
