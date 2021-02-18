@@ -3,7 +3,7 @@
 # Copyright (C) 2019 Michael Jeanson <mjeanson@efficios.com>
 #
 
-AC_PREREQ(2.59)
+AC_PREREQ(2.69)
 AC_INIT([lttng-trace],[0.1.0-pre],[mathieu dot desnoyers at efficios dot com], [], [https://github.com/compudj/lttng-trace/])
 
 AC_CONFIG_HEADERS([include/config.h])
@@ -13,16 +13,17 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_TARGET
 AC_CANONICAL_HOST
 
-AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip nostdinc])
+AM_INIT_AUTOMAKE([1.12 foreign dist-bzip2 no-dist-gzip nostdinc -Wall -Wno-portability -Werror])
 AM_MAINTAINER_MODE([enable])
 
-# Enable silent rules if available (Introduced in AM 1.11)
-m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
+# Enable silent rules by default
+AM_SILENT_RULES([yes])
 
 # Checks for C compiler
 AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
-AC_PROG_CC_STDC
+# AC_PROG_CC_STDC was merged in AC_PROG_CC in autoconf 2.70
+m4_version_prereq([2.70], [], [AC_PROG_CC_STDC])
 AC_PROG_CXX
 
 # Checks for programs.
