@@ -68,6 +68,10 @@ AC_CHECK_HEADERS([ \
 	stddef.h \
 ])
 
+# Check for liblttng-ust
+PKG_CHECK_MODULES([LTTNG_CTL], [lttng-ctl])
+AM_CFLAGS="$AM_CFLAGS $LTTNG_CTL_CFLAGS"
+
 AM_CPPFLAGS="-include config.h"
 AC_SUBST(AM_CPPFLAGS)
 

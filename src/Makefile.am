@@ -10,4 +10,4 @@ bin_PROGRAMS = lttng-trace
 lttng_trace_SOURCES = \
 	lttng-trace.c
 
-lttng_trace_LDADD = -llttng-ctl
+lttng_trace_LDADD = $(LTTNG_CTL_LIBS)
