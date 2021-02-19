@@ -122,7 +122,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 	if (ret) {
 	//if (ptrace_ret) {
 		PERROR("kill");
-		abort();
+		return -1;
 	}
 
 	for (;;) {
@@ -140,7 +140,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 			}
 		} else if (pid == 0) {
 			ERR("Unexpected PID 0");
-			abort();
+			return -1;
 		} else {
 			if (WIFSTOPPED(status)) {
 				int shiftstatus, restartsig;
@@ -163,7 +163,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 					ptrace_ret = ptrace(PTRACE_GETEVENTMSG, pid, 0, &newpid);
 					if (ptrace_ret) {
 						PERROR("ptrace");
-						abort();
+						return -1;
 					}
 					DBG("Child pid %d is forking, child pid %ld", pid, newpid);
 					for (i = 0; i < nr_handles; i++) {
@@ -178,7 +178,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 					ptrace_ret = ptrace(PTRACE_GETEVENTMSG, pid, 0, &newpid);
 					if (ptrace_ret) {
 						PERROR("ptrace");
-						abort();
+						return -1;
 					}
 					DBG("Child pid %d issuing vfork, child pid %ld", pid, newpid);
 					for (i = 0; i < nr_handles; i++) {
@@ -193,7 +193,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 					ptrace_ret = ptrace(PTRACE_GETEVENTMSG, pid, 0, &newpid);
 					if (ptrace_ret) {
 						PERROR("ptrace");
-						abort();
+						return -1;
 					}
 					DBG("Child pid %d issuing clone, child pid %ld", pid, newpid);
 					for (i = 0; i < nr_handles; i++) {
@@ -208,7 +208,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 					ptrace_ret = ptrace(PTRACE_GETEVENTMSG, pid, 0, &oldpid);
 					if (ptrace_ret) {
 						PERROR("ptrace");
-						abort();
+						return -1;
 					}
 					DBG("Child pid (old: %ld, new: %d) is issuing exec",
 							oldpid, pid);
@@ -260,7 +260,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 						ret = kill(pid, SIGTTIN);
 						if (ret) {
 							PERROR("kill");
-							abort();
+							return -1;
 						}
 					} else if (status >> 16 == PTRACE_EVENT_STOP) {
 						DBG("ptrace stop");
@@ -268,7 +268,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 						ptrace_ret = ptrace(PTRACE_CONT, pid, 0, 0);
 						if (ptrace_ret) {
 							PERROR("ptrace cont");
-							abort();
+							return -1;
 						}
 					} else {
 						DBG("job control stop ret %ld errno %d", ptrace_ret, errno);
@@ -279,7 +279,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 						ptrace_ret = ptrace(PTRACE_CONT, pid, 0, 0);
 						if (ptrace_ret) {
 							PERROR("ptrace cont");
-							abort();
+							return -1;
 						}
 					}
 					break;
@@ -296,7 +296,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 						ptrace_ret = ptrace(PTRACE_CONT, pid, 0, 0);
 						if (ptrace_ret) {
 							PERROR("ptrace");
-							abort();
+							return -1;
 						}
 						break;
 					//}
@@ -307,7 +307,7 @@ int wait_on_children(pid_t top_pid, struct lttng_handle **handle,
 					ptrace_ret = ptrace(PTRACE_CONT, pid, 0, restartsig);
 					if (ptrace_ret) {
 						PERROR("ptrace");
-						abort();
+						return -1;
 					}
 				}
 			} else if (WIFEXITED(status)) {
@@ -402,29 +402,39 @@ int enable_syscalls(struct lttng_trace_ctx *ctx)
 	struct lttng_domain domain;
 	struct lttng_event *ev;
 	struct lttng_handle *handle;
-	int ret;
+	int ret = 0;
 
 	if (opt_no_syscall)
 		return 0;
 	memset(&domain, 0, sizeof(domain));
 	ev = lttng_event_create();
-	if (!ev)
-		abort();
+	if (!ev) {
+		ERR("Error creating event");
+		goto end;
+	}
 	domain.type = LTTNG_DOMAIN_KERNEL;
 	domain.buf_type = LTTNG_BUFFER_GLOBAL;
 
 	handle = lttng_create_handle(ctx->session_name, &domain);
-	if (!handle)
-		abort();
+	if (!handle) {
+		ERR("Error creating handle");
+		ret = -1;
+		goto error_handle;
+	}
 	ev->type = LTTNG_EVENT_SYSCALL;
 	strcpy(ev->name, "*");
 	ev->loglevel_type = LTTNG_EVENT_LOGLEVEL_ALL;
 	ret = lttng_enable_event_with_exclusions(handle,
 			ev, NULL, NULL, 0, NULL);
-	if (ret)
-		abort();
+	if (ret) {
+		ERR("Error enabling syscall events");
+		ret = -1;
+	}
 	lttng_destroy_handle(handle);
-	return 0;
+error_handle:
+	lttng_event_destroy(ev);
+end:
+	return ret;
 }
 
 static
@@ -433,6 +443,8 @@ int add_contexts(struct lttng_trace_ctx *ctx, enum lttng_domain_type domain_type
 	struct lttng_domain domain;
 	struct lttng_event_context event_ctx;
 	struct lttng_handle *handle;
+	const char *domain_str;
+	int ret = 0;
 
 	if (opt_no_context)
 		return 0;
@@ -440,9 +452,11 @@ int add_contexts(struct lttng_trace_ctx *ctx, enum lttng_domain_type domain_type
 	switch (domain_type) {
 	case LTTNG_DOMAIN_KERNEL:
 		domain.buf_type = LTTNG_BUFFER_GLOBAL;
+		domain_str = "kernel";
 		break;
 	case LTTNG_DOMAIN_UST:
 		domain.buf_type = LTTNG_BUFFER_PER_UID;
+		domain_str = "ust";
 		break;
 	default:
 		return -1;
@@ -450,26 +464,37 @@ int add_contexts(struct lttng_trace_ctx *ctx, enum lttng_domain_type domain_type
 	domain.type = domain_type;
 
 	handle = lttng_create_handle(ctx->session_name, &domain);
-	if (!handle)
-		abort();
-
+	if (!handle) {
+		ERR("Error creating handle");
+		ret = -1;
+		goto end;
+	}
 	memset(&event_ctx, 0, sizeof(event_ctx));
 	event_ctx.ctx = LTTNG_EVENT_CONTEXT_PROCNAME;
-	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0)
-		abort();
-
+	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0) {
+		ERR("Error adding `procname` context to domain `%s`", domain_str);
+		ret = -1;
+		goto error_context;
+	}
 	memset(&event_ctx, 0, sizeof(event_ctx));
 	event_ctx.ctx = LTTNG_EVENT_CONTEXT_VPID;
-	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0)
-		abort();
-
+	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0) {
+		ERR("Error adding `vpid` context to domain `%s`", domain_str);
+		ret = -1;
+		goto error_context;
+	}
 	memset(&event_ctx, 0, sizeof(event_ctx));
 	event_ctx.ctx = LTTNG_EVENT_CONTEXT_VTID;
-	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0)
-		abort();
+	if (lttng_add_context(handle, &event_ctx, NULL, NULL) < 0) {
+		ERR("Error adding `vtid` context to domain `%s`", domain_str);
+		ret = -1;
+		goto error_context;
+	}
 
+error_context:
 	lttng_destroy_handle(handle);
-	return 0;
+end:
+	return ret;
 }
 
 static
@@ -478,31 +503,46 @@ int create_channels(struct lttng_trace_ctx *ctx, enum lttng_domain_type domain_t
 	struct lttng_domain domain;
 	struct lttng_channel *channel;
 	struct lttng_handle *handle;
+	const char *domain_str;
+	int ret = 0;
 
 	memset(&domain, 0, sizeof(domain));
 	switch (domain_type) {
 	case LTTNG_DOMAIN_KERNEL:
 		domain.buf_type = LTTNG_BUFFER_GLOBAL;
+		domain_str = "kernel";
 		break;
 	case LTTNG_DOMAIN_UST:
 		domain.buf_type = LTTNG_BUFFER_PER_UID;
+		domain_str = "ust";
 		break;
 	default:
 		return -1;
 	}
 	domain.type = domain_type;
 	channel = lttng_channel_create(&domain);
+	if (!channel) {
+		ERR("Error creating channel for domain `%s`", domain_str);
+		ret = -1;
+		goto end;
+	}
 	channel->enabled = 1;
 
 	handle = lttng_create_handle(ctx->session_name, &domain);
-	if (!handle)
-		abort();
-	if (lttng_enable_channel(handle, channel) < 0)
-		abort();
+	if (!handle) {
+		ERR("Error creating handle");
+		ret = -1;
+		goto error_handle;
+	}
+	if (lttng_enable_channel(handle, channel) < 0) {
+		ERR("Error enabling channel for domain `%s`", domain_str);
+		ret = -1;
+	}
 	lttng_destroy_handle(handle);
-
+error_handle:
 	lttng_channel_destroy(channel);
-	return 0;
+end:
+	return ret;
 }
 
 static
@@ -548,16 +588,21 @@ int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx, const char *cmd_name)
 	struct tm *timeinfo;
 
 	ctx->creation_time = time(NULL);
-	if (ctx->creation_time == (time_t) -1)
-		abort();
+	if (ctx->creation_time == (time_t) -1) {
+		PERROR("time");
+		return -1;
+	}
 	timeinfo = localtime(&ctx->creation_time);
-	if (!timeinfo)
-		abort();
+	if (!timeinfo) {
+		PERROR("localtime");
+		return -1;
+	}
 	strftime(datetime, sizeof(datetime), "%Y%m%d-%H%M%S", timeinfo);
 
 	if (opt_session) {
 		if (strlen(session_name) > LTTNG_NAME_MAX - 1) {
-			abort();
+			ERR("Session name is too long");
+			return -1;
 		}
 		strcpy(ctx->session_name, session_name);
 	} else {
@@ -570,7 +615,8 @@ int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx, const char *cmd_name)
 
 	if (opt_output) {
 		if (strlen(output_path) > PATH_MAX - 1) {
-			abort();
+			ERR("output path is too long");
+			return -1;
 		}
 		strcpy(ctx->path, output_path);
 	} else {
@@ -591,7 +637,6 @@ int lttng_trace_untrack_all(struct lttng_handle **handle,
 		ret = lttng_untrack_pid(handle[i], -1);
 		if (ret && ret != -LTTNG_ERR_INVALID) {
 			ERR("Error %d untracking pid %d", ret, -1);
-			abort();
 		}
 	}
 	return 0;
@@ -697,19 +742,27 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 
-	if (lttng_trace_ctx_init(&ptrace_ctx, argv[skip_args]))
-		abort();
+	if (lttng_trace_ctx_init(&ptrace_ctx, argv[skip_args])) {
+		ERR("Error initializing trace context");
+		retval = -1;
+		goto end;
+	}
 
 	act.sa_sigaction = sighandler;
 	act.sa_flags = SA_SIGINFO | SA_RESTART;
 	sigemptyset(&act.sa_mask);
 	ret = sigaction(SIGTERM, &act, NULL);
-	if (ret)
-		abort();
+	if (ret) {
+		PERROR("sigaction");
+		retval = -1;
+		goto end;
+	}
 	ret = sigaction(SIGINT, &act, NULL);
-	if (ret)
-		abort();
-
+	if (ret) {
+		PERROR("sigaction");
+		retval = -1;
+		goto end;
+	}
 	if (create_session(&ptrace_ctx) < 0) {
 		fprintf(stderr, "%sError: Unable to create tracing session. Please ensure that lttng-sessiond is running as root and that your user belongs to the `tracing` group.\n", MESSAGE_PREFIX);
 		retval = -1;
@@ -782,8 +835,10 @@ end_wait_on_children:
 end_ust_handle:
 	lttng_destroy_handle(handle[0]);
 end_kernel_handle:
-	if (destroy_session(&ptrace_ctx))
-		abort();
+	if (destroy_session(&ptrace_ctx)) {
+		ERR("Error destroying session");
+		retval = -1;
+	}
 end:
 	if (retval) {
 		return EXIT_FAILURE;
