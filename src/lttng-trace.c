@@ -596,6 +596,11 @@ void replace_session_chars(char *session_name)
 		case '/':
 			*p = '_';
 			break;
+		case '.':
+			/* Leading dot is replaced by '_'. */
+			if (i == 0)
+				*p = '_';
+			break;
 		default:
 			break;
 		}
