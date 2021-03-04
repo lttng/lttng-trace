@@ -581,6 +581,27 @@ void sighandler(int signo, siginfo_t *siginfo __unused, void *context __unused)
 	}
 }
 
+/*
+ * Replace forbidden session name characters by '_'.
+ */
+static
+void replace_session_chars(char *session_name)
+{
+	size_t len, i;
+
+	len = strlen(session_name);
+	for (i = 0; i < len; i++) {
+		char *p = &session_name[i];
+		switch (*p) {
+		case '/':
+			*p = '_';
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static
 int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx, const char *cmd_name)
 {
@@ -612,6 +633,7 @@ int lttng_trace_ctx_init(struct lttng_trace_ctx *ctx, const char *cmd_name)
 		strcat(ctx->session_name, "-");
 		strcat(ctx->session_name, datetime);
 	}
+	replace_session_chars(ctx->session_name);
 
 	if (opt_output) {
 		if (strlen(output_path) > PATH_MAX - 1) {
